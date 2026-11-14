@@ -5,7 +5,7 @@ targets are up at a time. Shoot one and a new target appears in a random free sp
 You get 60 seconds to hit as many as you can.
 
 Mouse look uses your **Valorant sensitivity**, so practice here feels the same as in game.
-It's one **0.7 MB exe** with no installer, no launcher and no account.
+It's one **0.8 MB exe** with no installer, no launcher and no account.
 
 ![Playing](docs/screenshots/playing.png)
 
@@ -18,6 +18,9 @@ It's one **0.7 MB exe** with no installer, no launcher and no account.
   view is Valorant's 103° horizontal at 16:9, so targets look the same size too.
 - **Misses you can see:** a live miss counter, and a red ✕ where each missed shot landed.
 - **High scores:** your top 10 rounds, with hits, misses, accuracy, sensitivity and date.
+- **Show / hide from any game:** press **Ctrl+Shift+G** while you play Valorant (or
+  anything else) and Gridshot comes to the front. Press it again to go straight back to your
+  game. While it's in the background Gridshot drops to about 20 FPS and uses under 0.1% CPU.
 - **Pause on Alt+Tab:** pressing the Windows key or Alt+Tab pauses the round and frees your
   mouse. Click the game to carry on.
 - **Fullscreen or windowed:** F11 or Alt+Enter switches, and the game remembers your choice.
@@ -39,7 +42,7 @@ i7-12700F, an RTX 3060 and a 360 Hz monitor.
 
 | | Gridshot |
 | --- | --- |
-| Download size | **0.74 MB** (one exe, no other files) |
+| Download size | **0.8 MB** (one exe, no other files) |
 | Frame rate | 360 FPS (locked to the monitor), 2.8 ms a frame |
 | CPU | **0.5 %** average, 1.2 % peak (share of all 20 threads, as Task Manager shows it) |
 | RAM (working set) | **~45 MB** average, 84 MB peak during start-up |
@@ -62,6 +65,7 @@ corner shows the same FPS, CPU and RAM numbers live.
 | **Start** / **Play again** button | Start a round. The end screen waits a second before its buttons work, so leftover clicks don't start a new round. |
 | Left click | Shoot |
 | Esc | Leave the round, or quit from the menu |
+| Ctrl+Shift+G (works from any app) | Bring Gridshot to the front, or send it back to the app you were in |
 | Windows key, Alt+Tab | Pause the round and free the mouse; click the game to carry on |
 | F11, Alt+Enter | Toggle fullscreen |
 | Up / Down (hold Shift for ×10) | Change sensitivity on the menu |
@@ -78,7 +82,12 @@ fullscreen=false
 vsync=true        # false = uncapped frame rate, less input lag (read at start-up)
 duration=60       # round length in seconds
 volume=0.5
+hotkey=ctrl+shift+g   # show / hide key, e.g. alt+f9, ctrl+`, f8, or off
 ```
+
+If another app already uses the hotkey, the menu says so. Pick a different one in
+`settings.txt`. Valorant should run in **windowed fullscreen** for the quickest switching;
+exclusive fullscreen still works but Windows takes a moment to swap.
 
 `scores.txt` keeps the top 10 rounds for each round length, ranked by hits and then by
 fewer misses.
@@ -116,6 +125,7 @@ in code and the targets are lit with a tiny shader.
 | `src/main.rs` | Window, input, game loop and drawing |
 | `src/scores.rs` | High score table (unit tested) |
 | `src/settings.rs` | Settings file (unit tested) |
+| `src/hotkey.rs` | The system-wide show / hide key (unit tested) |
 | `src/usage.rs` | The CPU and RAM meter |
 | `src/demo.rs` | Screenshot and benchmark modes |
 | `src/sound.rs` | The generated hit sound |

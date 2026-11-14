@@ -11,11 +11,13 @@ pub struct Settings {
     /// Round length in seconds.
     pub duration: u32,
     pub volume: f32,
+    /// System-wide show / hide key, e.g. `ctrl+shift+g`, or `off`.
+    pub hotkey: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { sensitivity: 0.35, fullscreen: false, vsync: true, duration: 60, volume: 0.5 }
+        Settings { sensitivity: 0.35, fullscreen: false, vsync: true, duration: 60, volume: 0.5, hotkey: crate::hotkey::DEFAULT.to_owned() }
     }
 }
 
@@ -43,6 +45,7 @@ impl Settings {
                 "fullscreen" => s.fullscreen = v == "true",
                 "vsync" => s.vsync = v != "false",
                 "duration" => s.duration = v.parse::<u32>().unwrap_or(s.duration).clamp(5, 600),
+                "hotkey" => s.hotkey = v.to_owned(),
                 "volume" => s.volume = v.parse::<f32>().unwrap_or(s.volume).clamp(0.0, 1.0),
                 _ => {}
             }
@@ -52,12 +55,13 @@ impl Settings {
 
     pub fn to_text(&self) -> String {
         format!(
-            "sensitivity={}\nfullscreen={}\nvsync={}\nduration={}\nvolume={}\n",
+            "sensitivity={}\nfullscreen={}\nvsync={}\nduration={}\nvolume={}\nhotkey={}\n",
             self.sens_text(),
             self.fullscreen,
             self.vsync,
             self.duration,
-            self.volume
+            self.volume,
+            self.hotkey
         )
     }
 
@@ -83,11 +87,12 @@ mod tests {
 
     #[test]
     fn round_trips() {
-        let s = Settings { sensitivity: 0.287, fullscreen: true, vsync: false, duration: 30, volume: 0.25 };
+        let s = Settings { sensitivity: 0.287, fullscreen: true, vsync: false, duration: 30, volume: 0.25, hotkey: "alt+f9".into() };
         let back = Settings::parse(&s.to_text());
         assert_eq!(back.sensitivity, 0.287);
         assert!(back.fullscreen && !back.vsync);
         assert_eq!(back.duration, 30);
+        assert_eq!(back.hotkey, "alt+f9");
     }
 
     #[test]

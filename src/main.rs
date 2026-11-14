@@ -6,10 +6,12 @@
 
 mod demo;
 mod game;
+mod hotkey;
 mod scores;
 mod settings;
 mod sound;
 mod usage;
+mod winutil;
 
 use game::{Aim, Grid, Shot};
 use macroquad::audio::{play_sound, PlaySoundParams, Sound};
@@ -17,6 +19,7 @@ use macroquad::miniquad::{Comparison, PipelineParams};
 use macroquad::prelude::*;
 use scores::{Score, Scores};
 use settings::Settings;
+use winutil::has_focus;
 
 /// Valorant's 103 degree horizontal FOV at 16:9, as a vertical FOV (about 70.53 degrees).
 const VFOV_DEG: f32 = 70.532_6;
@@ -135,6 +138,11 @@ async fn main() {
     let mut buttons_from = 0.0_f64;
     let mut fps = FpsMeter::default();
     let mut demo = demo::Demo::from_env();
+    let hotkey = match &demo {
+        None => hotkey::start(&settings.hotkey),
+        // Demo runs show the default key but leave it free for a normal copy of the game.
+        Some(_) => hotkey::Status::Ready("Ctrl+Shift+G".to_owned()),
+    };
 
     loop {
         let now = get_time();
@@ -158,6 +166,14 @@ async fn main() {
                 break;
             }
         } else {
+            if hotkey::take_hide_request() {
+                // Let go of the mouse while Gridshot is still in front, then hand focus back.
+                if state == State::Playing {
+                    state = State::Paused { at: now };
+                }
+                grab(false, &mut last_raw);
+                hotkey::hide_now();
+            }
             if is_key_pressed(KeyCode::F11)
                 || (is_key_pressed(KeyCode::Enter) && (is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt)))
             {
@@ -199,8 +215,9 @@ async fn main() {
                     }
                 }
                 State::Playing if !has_focus() => {
-                    // Windows key, alt-tab, a popup...: give the mouse back and hold the round.
-                    grab(false, &mut last_raw);
+                    // Windows key, alt-tab, a popup...: give the mouse back and hold the round,
+                    // without undoing a cursor clip the newly focused app (e.g. Valorant) has set.
+                    winutil::release_keeping_other_clip(|| grab(false, &mut last_raw));
                     state = State::Paused { at: now };
                 }
                 State::Playing => {
@@ -305,10 +322,10 @@ async fn main() {
             }
             State::Paused { at } => {
                 draw_hud(w, settings.duration as f64 - (at - round_start), hits, misses);
-                draw_paused(w, h);
+                draw_paused(w, h, &hotkey);
                 None
             }
-            State::Menu => draw_menu(w, h, &sens_text, &settings, &scores, live),
+            State::Menu => draw_menu(w, h, &sens_text, &settings, &scores, live, &hotkey),
             State::Results { rank } => draw_results(w, h, hits, misses, &settings, &scores, rank, live),
         };
         let action = if demo.is_some() { None } else { action };
@@ -330,6 +347,9 @@ async fn main() {
 
         if let Some(d) = demo.as_mut() {
             d.after_draw(now);
+        } else if !has_focus() {
+            // In the background (e.g. while you play Valorant): ~20 FPS so it costs next to nothing.
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
         next_frame().await;
     }
@@ -380,38 +400,15 @@ fn draw_hud(w: f32, left: f64, hits: u32, misses: u32) {
     draw_text(&acc_s, w - m.width - 28.0, 50.0, 32.0, WHITE);
 }
 
-fn draw_paused(w: f32, h: f32) {
-    let top = panel(w, h, 190.0);
+fn draw_paused(w: f32, h: f32, hotkey: &hotkey::Status) {
+    let top = panel(w, h, 215.0);
     let cx = w / 2.0;
     centered("PAUSED", cx, top + 70.0, 48.0, WHITE);
     centered("Click to carry on", cx, top + 125.0, 30.0, Color::from_rgba(255, 138, 61, 255));
-    centered("Esc menu", cx, top + 160.0, 20.0, Color::from_rgba(160, 168, 185, 255));
-}
-
-/// True while the game window is the one in front. When you press the Windows key or
-/// alt-tab, another process (Start menu, Explorer...) owns the foreground window.
-#[cfg(windows)]
-fn has_focus() -> bool {
-    use std::ffi::c_void;
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetForegroundWindow() -> *mut c_void;
-        fn GetWindowThreadProcessId(hwnd: *mut c_void, pid: *mut u32) -> u32;
+    centered("Esc menu", cx, top + 160.0, 20.0, DIM);
+    if let hotkey::Status::Ready(k) = hotkey {
+        centered(&format!("{k}  back to your game"), cx, top + 190.0, 20.0, DIM);
     }
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd.is_null() {
-            return false;
-        }
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, &mut pid);
-        pid == std::process::id()
-    }
-}
-
-#[cfg(not(windows))]
-fn has_focus() -> bool {
-    true
 }
 
 fn grab(on: bool, last_raw: &mut Option<Vec2>) {
@@ -471,8 +468,17 @@ fn panel(w: f32, h: f32, ph: f32) -> f32 {
     py
 }
 
-fn draw_menu(w: f32, h: f32, sens_text: &str, s: &Settings, scores: &Scores, live: bool) -> Option<Action> {
-    let top = panel(w, h, 580.0);
+#[allow(clippy::too_many_arguments)]
+fn draw_menu(
+    w: f32,
+    h: f32,
+    sens_text: &str,
+    s: &Settings,
+    scores: &Scores,
+    live: bool,
+    hotkey: &hotkey::Status,
+) -> Option<Action> {
+    let top = panel(w, h, 600.0);
     let cx = w / 2.0;
     centered("GRIDSHOT", cx, top + 70.0, 64.0, ORANGE);
     centered("Valorant sensitivity", cx, top + 120.0, 26.0, DIM);
@@ -482,7 +488,12 @@ fn draw_menu(w: f32, h: f32, sens_text: &str, s: &Settings, scores: &Scores, liv
     centered(&format!("High scores, {} s rounds", s.duration), cx, top + 245.0, 26.0, WHITE);
     draw_table(cx, top + 275.0, &scores.top(s.duration), 5, None);
     let start = button(cx, top + 470.0, "Start", live);
-    centered("F11 fullscreen     Esc quit", cx, top + 560.0, 20.0, DIM);
+    centered("F11 fullscreen     Esc quit", cx, top + 552.0, 20.0, DIM);
+    match hotkey {
+        hotkey::Status::Ready(k) => centered(&format!("{k}  show / hide from any game"), cx, top + 580.0, 20.0, DIM),
+        hotkey::Status::Failed(why) => centered(&format!("Show / hide key off: {why}"), cx, top + 580.0, 20.0, MISS_RED),
+        hotkey::Status::Off => {}
+    }
     start.then_some(Action::Start)
 }
 
