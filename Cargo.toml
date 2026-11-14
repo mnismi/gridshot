@@ -1,6 +1,6 @@
 [package]
 name = "gridshot"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A tiny native Windows aim trainer: a 3x3 grid, three targets at a time, Valorant sensitivity."
 license = "MIT"
@@ -11,6 +11,10 @@ categories = ["games"]
 
 [dependencies]
 macroquad = "0.4"
+
+# Patched copy of miniquad: see vendor/README.md
+[patch.crates-io]
+miniquad = { path = "vendor/miniquad" }
 
 [profile.release]
 opt-level = 3

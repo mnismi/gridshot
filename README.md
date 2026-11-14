@@ -129,6 +129,7 @@ in code and the targets are lit with a tiny shader.
 | `src/usage.rs` | The CPU and RAM meter |
 | `src/demo.rs` | Screenshot and benchmark modes |
 | `src/sound.rs` | The generated hit sound |
+| `vendor/miniquad` | miniquad with a one-function fix so Gridshot never releases another app's mouse lock (see `vendor/README.md`) |
 
 ## License
 
