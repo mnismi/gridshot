@@ -1,0 +1,20 @@
+[package]
+name = "gridshot"
+version = "0.1.0"
+edition = "2021"
+description = "A tiny native Windows aim trainer: a 3x3 grid, three targets at a time, Valorant sensitivity."
+license = "MIT"
+repository = "https://github.com/mnismi/gridshot"
+readme = "README.md"
+keywords = ["aim-trainer", "fps", "valorant", "game", "macroquad"]
+categories = ["games"]
+
+[dependencies]
+macroquad = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
