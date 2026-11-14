@@ -2,8 +2,9 @@
 //!
 //! The cursor clip (`ClipCursor`) is one rectangle for the whole system. Games like Valorant
 //! set it when they get focus. If Gridshot cleared it after losing focus it would cancel the
-//! game's clip and the mouse could wander out of the game, so Gridshot only clears a clip
-//! that is still its own.
+//! game's clip and the mouse could wander out of the game. miniquad also applies a grab change
+//! one frame late, so Gridshot waits for its own release to happen before handing focus back,
+//! and puts back a game's clip if its late release landed on top of it.
 
 #[cfg(windows)]
 mod imp {
@@ -29,6 +30,7 @@ mod imp {
         fn ClipCursor(rect: *const Rect) -> i32;
         fn GetClientRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
         fn ClientToScreen(hwnd: Hwnd, point: *mut [i32; 2]) -> i32;
+        fn GetSystemMetrics(index: i32) -> i32;
     }
 
     fn pid_of(hwnd: Hwnd) -> u32 {
@@ -72,14 +74,40 @@ mod imp {
         }
     }
 
-    /// Run `release` (which clears the clip), then put back the clip if it belonged to
-    /// another app rather than to Gridshot.
-    pub fn release_keeping_other_clip(release: impl FnOnce()) {
-        let mut current = Rect::default();
-        let had = unsafe { GetClipCursor(&mut current) } != 0;
-        release();
-        if had && Some(current) != own_client_rect() {
-            unsafe { ClipCursor(&current) };
+    fn current_clip() -> Rect {
+        let mut r = Rect::default();
+        unsafe { GetClipCursor(&mut r) };
+        r
+    }
+
+    /// What the clip covers when nobody has set one: the whole virtual desktop.
+    fn no_clip() -> Rect {
+        const SM_XVIRTUALSCREEN: i32 = 76;
+        const SM_YVIRTUALSCREEN: i32 = 77;
+        const SM_CXVIRTUALSCREEN: i32 = 78;
+        const SM_CYVIRTUALSCREEN: i32 = 79;
+        unsafe {
+            let (x, y) = (GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN));
+            Rect {
+                left: x,
+                top: y,
+                right: x + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                bottom: y + GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            }
+        }
+    }
+
+    /// A clip that some other app (e.g. a game that just took focus) has set, if any.
+    pub fn other_app_clip() -> Option<Rect> {
+        let c = current_clip();
+        (c != no_clip() && Some(c) != own_client_rect()).then_some(c)
+    }
+
+    /// Put back another app's clip if ours was released on top of it. Only while that
+    /// app is still in front and nobody has set a different clip since.
+    pub fn restore_clip_if_cleared(r: Rect) {
+        if !has_focus() && current_clip() == no_clip() {
+            unsafe { ClipCursor(&r) };
         }
     }
 }
@@ -89,9 +117,12 @@ mod imp {
     pub fn has_focus() -> bool {
         true
     }
-    pub fn release_keeping_other_clip(release: impl FnOnce()) {
-        release()
+    #[derive(Clone, Copy)]
+    pub struct Rect;
+    pub fn other_app_clip() -> Option<Rect> {
+        None
     }
+    pub fn restore_clip_if_cleared(_r: Rect) {}
 }
 
 pub use imp::*;

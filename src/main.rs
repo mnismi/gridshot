@@ -137,6 +137,10 @@ async fn main() {
     let mut pointer_live = false;
     let mut buttons_from = 0.0_f64;
     let mut fps = FpsMeter::default();
+    // miniquad applies a cursor grab change on the next frame, so these run a couple of frames
+    // after releasing the mouse: handing focus back (hotkey), and restoring a game's clip.
+    let mut hide_in_frames: Option<u8> = None;
+    let mut restore_clip: Option<(winutil::Rect, u8)> = None;
     let mut demo = demo::Demo::from_env();
     let hotkey = match &demo {
         None => hotkey::start(&settings.hotkey),
@@ -167,12 +171,29 @@ async fn main() {
             }
         } else {
             if hotkey::take_hide_request() {
-                // Let go of the mouse while Gridshot is still in front, then hand focus back.
+                // Let go of the mouse while Gridshot is still in front; hand focus back once
+                // the release has really happened (two frames later).
                 if state == State::Playing {
                     state = State::Paused { at: now };
                 }
                 grab(false, &mut last_raw);
-                hotkey::hide_now();
+                hide_in_frames = Some(2);
+            }
+            match hide_in_frames {
+                Some(0) => {
+                    hotkey::hide_now();
+                    hide_in_frames = None;
+                }
+                Some(n) => hide_in_frames = Some(n - 1),
+                None => {}
+            }
+            match restore_clip {
+                Some((r, 0)) => {
+                    winutil::restore_clip_if_cleared(r);
+                    restore_clip = None;
+                }
+                Some((r, n)) => restore_clip = Some((r, n - 1)),
+                None => {}
             }
             if is_key_pressed(KeyCode::F11)
                 || (is_key_pressed(KeyCode::Enter) && (is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt)))
@@ -217,7 +238,9 @@ async fn main() {
                 State::Playing if !has_focus() => {
                     // Windows key, alt-tab, a popup...: give the mouse back and hold the round,
                     // without undoing a cursor clip the newly focused app (e.g. Valorant) has set.
-                    winutil::release_keeping_other_clip(|| grab(false, &mut last_raw));
+                    let theirs = winutil::other_app_clip();
+                    grab(false, &mut last_raw);
+                    restore_clip = theirs.map(|r| (r, 2));
                     state = State::Paused { at: now };
                 }
                 State::Playing => {
